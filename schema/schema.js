@@ -1,6 +1,3 @@
-const {projects, clients} = require('../sampleData')
-// we are no longer using sample data 
-
 // mongoose models 
 const Project = require('../models/Project')
 const Client = require('../models/Client')
@@ -103,36 +100,42 @@ const mutation = new GraphQLObjectType({
             }
         },
 
-        // for deleting client from db 
-        // deleteClient: {
-        //     type: ClientType,
-        //     args: {
-        //         id: {type: GraphQLNonNull(GraphQLID)}
-        //     },
-            
-        //     resolve(parent, args) {
-        //         Project.find({clientId: args.id}).then((projects) => {
-        //             projects.forEach((project) => {
-        //                 project.remove();
-        //             })
-        //         })
-        //         return Client.findByIdAndDelete(args.id);
-        //     }
-        // },
-
+        // this deletes clients and his projects 
         deleteClient: {
             type: ClientType,
             args: {
-                id: { type: GraphQLNonNull(GraphQLID) }
+                id: {type: GraphQLNonNull(GraphQLID)}
             },
+            
             async resolve(parent, args) {
-                // Delete all projects associated with the client
-                await Project.deleteMany({ clientId: args.id });
-        
-                // Delete the client
-                return Client.findByIdAndDelete(args.id);
+                try {
+                    // Delete all projects associated with this client
+                    await Project.deleteMany({clientId: args.id});
+                    
+                    // Delete the client
+                    const deletedClient = await Client.findByIdAndDelete(args.id);
+                    
+                    return deletedClient;
+                } catch (error) {
+                    throw new Error(`Failed to delete client: ${error.message}`);
+                }
             }
-        },        
+        },
+
+        // this just deletes the clients 
+        // deleteClient: {
+        //     type: ClientType,
+        //     args: {
+        //         id: { type: GraphQLNonNull(GraphQLID) }
+        //     },
+        //     async resolve(parent, args) {
+        //         // Delete all projects associated with the client
+        //         await Project.deleteMany({ clientId: args.id });
+        
+        //         // Delete the client
+        //         return Client.findByIdAndDelete(args.id);
+        //     }
+        // },        
 
         // adding project to db 
         addProject: {
@@ -184,10 +187,10 @@ const mutation = new GraphQLObjectType({
                 description: {type: GraphQLString},
                 status: {
                     type: new GraphQLEnumType({
-                        name: 'ProjectStatusUpdated',
+                        name: 'ProjectStatusUpdate',
                         values: {
                             'new': {value: 'Not Started'},
-                            'Progress': {value: 'In Progress'},
+                            'progress': {value: 'In Progress'},
                             'completed': {value: 'Completed'}
                         }
                     }),
