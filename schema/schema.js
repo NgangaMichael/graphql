@@ -1,6 +1,11 @@
 // mongoose models 
 const Project = require('../models/Project')
 const Client = require('../models/Client')
+const User = require('../models/User')
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'yoursecretkey';
 
 const {
     GraphQLObjectType, 
@@ -20,6 +25,17 @@ const ClientType = new GraphQLObjectType({
         name: {type: GraphQLString},
         email: {type: GraphQLString},
         phone: {type: GraphQLString},
+    })
+})
+
+// user type 
+const UserType = new GraphQLObjectType({
+    name: 'user',
+    fields: () => ({
+        id: {type: GraphQLID},
+        name: {type: GraphQLString},
+        email: {type: GraphQLString},
+        password: {type: GraphQLString},
     })
 })
 
@@ -72,6 +88,21 @@ const RootQuery = new GraphQLObjectType({
             args: {id: {type: GraphQLID}},
             resolve(parent, args) {
                 return Client.findById(args.id)
+            }
+        },
+
+        // for users
+        users: {
+            type: new GraphQLList(UserType),
+            resolve(parent, args) {
+                return User.find()
+            }
+        },
+        user: {
+            type: UserType,
+            args: {id: {type: GraphQLID}},
+            resolve(parent, args) {
+                return User.findById(args.id)
             }
         }
     }
@@ -209,7 +240,56 @@ const mutation = new GraphQLObjectType({
                     {new: true}
                 )
             }
-        }
+        },
+
+        registerUser: {
+            type: UserType,
+            args: {
+                name: { type: GraphQLNonNull(GraphQLString) },
+                email: { type: GraphQLNonNull(GraphQLString) },
+                password: { type: GraphQLNonNull(GraphQLString) },
+            },
+            async resolve(parent, args) {
+                const existing = await User.findOne({ email: args.email });
+                if (existing) {
+                    throw new Error('User already exists');
+                }
+
+                const hashedPassword = await bcrypt.hash(args.password, 10);
+                const user = new User({
+                    name: args.name,
+                    email: args.email,
+                    password: hashedPassword,
+                });
+
+                return user.save();
+            }
+        },
+
+        loginUser: {
+            type: GraphQLString, // return token
+            args: {
+                email: { type: GraphQLNonNull(GraphQLString) },
+                password: { type: GraphQLNonNull(GraphQLString) },
+            },
+            async resolve(parent, args) {
+                const user = await User.findOne({ email: args.email });
+                if (!user) {
+                    throw new Error('User not found');
+                }
+
+                const isValid = await bcrypt.compare(args.password, user.password);
+                if (!isValid) {
+                    throw new Error('Invalid credentials');
+                }
+
+                const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, {
+                    expiresIn: '1d'
+                });
+
+                return token;
+            }
+        },
     }
 })
 
